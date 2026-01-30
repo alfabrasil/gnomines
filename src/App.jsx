@@ -5,9 +5,9 @@ import {
   Lightbulb, X, Wallet, CheckSquare, Gift, ShieldAlert, 
   Dices, Star, Sparkles, Hammer, ZapOff, Trophy, Save, Activity,
   PieChart, TrendingUp, Briefcase, Award, Wrench, Newspaper,
-  TrendingDown, ArrowUpRight, ArrowDownRight, Settings, Users,
+  TrendingDown, ArrowUpRight, ArrowDownRight, ArrowUpDown, Settings, Users,
   Volume2, VolumeX, LogOut, RefreshCw, Share2, HelpCircle, Moon,
-  History, Copy, Network, Eye, Heart, Home
+  History, Copy, Network, Eye, Heart, Home, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // --- CONFIGURAÇÕES DO JOGO ---
@@ -86,9 +86,9 @@ const INITIAL_MINES = [
 
 const PRICES = {
   ENERGY_PACK_SMALL: { cost: 50, amount: 20, currency: 'gnocripto', type: 'consumable' },
-  COLLECTOR_GNOME: { cost: 5, currency: 'usdt', type: 'automation' },
+  COLLECTOR_GNOME: { cost: 500, currency: 'gnocripto', type: 'automation' }, // Antes $5
   TITANIUM_PICKAXE: { id: 'pickaxe_t1', name: 'Picareta de Titânio', cost: 400, currency: 'gnocripto', type: 'equipment', bonusType: 'flat', bonusValue: 5, desc: '+5 Produção Base' },
-  TURBO_DRILL: { id: 'drill_t1', name: 'Broca Turbo', cost: 10, currency: 'usdt', type: 'equipment', bonusType: 'multiplier', bonusValue: 0.2, desc: '+20% Produção Total' }
+  TURBO_DRILL: { id: 'drill_t1', name: 'Broca Turbo', cost: 1000, currency: 'gnocripto', type: 'equipment', bonusType: 'multiplier', bonusValue: 0.2, desc: '+20% Produção Total' } // Antes $10
 };
 
 const LEADERBOARD_DATA = [
@@ -154,6 +154,11 @@ export default function App() {
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+
+  // Estados da Carteira Avançada
+  const [swapAmount, setSwapAmount] = useState('');
+  const [swapDirection, setSwapDirection] = useState('USDT_TO_GNO'); // 'USDT_TO_GNO' | 'GNO_TO_USDT'
+  const [simulationGnomeIndex, setSimulationGnomeIndex] = useState(0);
 
   // --- CARREGAMENTO E SALVAMENTO ---
   useEffect(() => {
@@ -230,6 +235,12 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [floatingTexts]);
+
+  useEffect(() => {
+    if (showWalletModal) {
+      setSwapAmount('');
+    }
+  }, [showWalletModal]);
 
   // Simulação de Mercado
   useEffect(() => {
@@ -485,6 +496,36 @@ export default function App() {
   
   const handleWalletTransaction = (type, amount, currency) => { if (type === 'deposit') { setUser(prev => ({ ...prev, [currency]: prev[currency] + amount, transactions: [{ type: 'DEPOSIT', amount, currency, date: new Date().toLocaleTimeString() }, ...(prev.transactions || [])] })); showNotify('success', `Depósito confirmado!`); } else { if (user[currency] < amount) return showNotify('error', 'Saldo insuficiente'); setUser(prev => ({ ...prev, [currency]: prev[currency] - amount, transactions: [{ type: 'WITHDRAW', amount, currency, date: new Date().toLocaleTimeString() }, ...(prev.transactions || [])] })); showNotify('success', `Saque realizado!`); } };
 
+  const handleSwap = () => {
+    const amount = parseFloat(swapAmount);
+    if (!amount || amount <= 0) return showNotify('error', 'Valor inválido');
+    
+    const rate = CONFIG.EXCHANGE_RATE;
+
+    if (swapDirection === 'USDT_TO_GNO') {
+      if (user.usdt < amount) return showNotify('error', 'Saldo USDT insuficiente');
+      const gain = amount * rate;
+      setUser(u => ({ 
+        ...u, 
+        usdt: u.usdt - amount, 
+        gnocripto: u.gnocripto + gain,
+        transactions: [{ type: 'SWAP', amount: `-${amount} USDT / +${gain} GNO`, currency: 'MIX', date: new Date().toLocaleTimeString() }, ...(u.transactions || [])]
+      }));
+      showNotify('success', `Convertido: $${amount} -> ${gain} GNO`);
+    } else {
+      if (user.gnocripto < amount) return showNotify('error', 'Saldo GNO insuficiente');
+      const gain = amount / rate;
+      setUser(u => ({ 
+        ...u, 
+        gnocripto: u.gnocripto - amount, 
+        usdt: u.usdt + gain,
+        transactions: [{ type: 'SWAP', amount: `-${amount} GNO / +${gain.toFixed(2)} USDT`, currency: 'MIX', date: new Date().toLocaleTimeString() }, ...(u.transactions || [])]
+      }));
+      showNotify('success', `Convertido: ${amount} GNO -> $${gain.toFixed(2)}`);
+    }
+    setSwapAmount('');
+  };
+
   // --- RENDERIZADORES ---
 
   const renderLoginScreen = () => (
@@ -503,7 +544,29 @@ export default function App() {
         <div className="bg-gray-800 w-full max-w-sm rounded-xl border border-gray-700 h-[600px] flex flex-col">
           <div className="p-4 border-b border-gray-700 flex justify-between items-center"><h3 className="font-bold text-white flex gap-2"><Wallet size={18}/> Minha Carteira</h3><button onClick={()=>setShowWalletModal(false)}><X className="text-gray-400" /></button></div>
           <div className="p-4 bg-gray-900 m-4 rounded-lg border border-gray-700"><p className="text-xs text-gray-500 mb-1">Endereço Conectado (Polygon)</p><p className="text-sm font-mono text-green-400 truncate">{user.walletAddress || "0x..."}</p></div>
-          <div className="flex-1 overflow-y-auto px-4"><h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1"><History size={12}/> Histórico de Transações</h4>{(!user.transactions || user.transactions.length === 0) ? (<p className="text-gray-600 text-center text-xs py-4">Nenhuma transação recente.</p>) : (<div className="space-y-2">{user.transactions.map((tx, idx) => (<div key={idx} className="flex justify-between items-center bg-gray-700/30 p-2 rounded border border-gray-700/50"><div><p className={`text-xs font-bold ${tx.type === 'DEPOSIT' ? 'text-green-400' : 'text-red-400'}`}>{tx.type === 'DEPOSIT' ? 'Entrada' : 'Saída'}</p><p className="text-[10px] text-gray-500">{tx.date}</p></div><p className="text-sm font-mono font-bold text-white">{tx.type === 'DEPOSIT' ? '+' : '-'}{tx.amount} {tx.currency}</p></div>))}</div>)}</div><div className="p-4 border-t border-gray-700 bg-gray-800 rounded-b-xl space-y-2"><div className="grid grid-cols-2 gap-2"><button onClick={() => handleWalletTransaction('deposit', 10, 'usdt')} className="bg-green-600 hover:bg-green-500 text-white py-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1"><ArrowDownRight size={14}/> Depositar USDT</button><button onClick={() => handleWalletTransaction('withdraw', 10, 'usdt')} className="bg-red-600/20 text-red-400 border border-red-500 hover:bg-red-900/40 py-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1"><ArrowUpRight size={14}/> Sacar USDT</button></div></div></div></div>); };
+          <div className="flex-1 overflow-y-auto px-4">
+            <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1"><RefreshCw size={12}/> Conversão Avançada</h4>
+            <div className="bg-gray-700/30 p-4 rounded-lg border border-gray-700 mb-4 space-y-4">
+              <div className="relative">
+                <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">{swapDirection === 'USDT_TO_GNO' ? 'Você Paga (USDT)' : 'Você Paga (GNO)'}</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={swapAmount} onChange={(e) => setSwapAmount(e.target.value)} placeholder="0.00" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white font-mono text-sm focus:border-yellow-500 outline-none transition-colors" />
+                  <button onClick={() => setSwapAmount(swapDirection === 'USDT_TO_GNO' ? user.usdt : user.gnocripto)} className="absolute right-2 top-8 text-[10px] bg-gray-700 hover:bg-gray-600 text-yellow-500 px-2 py-0.5 rounded border border-gray-600">MAX</button>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1 text-right">Saldo: <span className="text-gray-300">{swapDirection === 'USDT_TO_GNO' ? `$${user.usdt.toFixed(2)}` : `${user.gnocripto.toFixed(0)} GNO`}</span></p>
+              </div>
+              <div className="flex justify-center -my-2 relative z-10">
+                <button onClick={() => { setSwapDirection(prev => prev === 'USDT_TO_GNO' ? 'GNO_TO_USDT' : 'USDT_TO_GNO'); setSwapAmount(''); }} className="bg-gray-800 border border-gray-600 p-2 rounded-full text-yellow-500 hover:text-white hover:bg-yellow-600 transition-all shadow-lg" title="Inverter Direção"><ArrowUpDown size={16} /></button>
+              </div>
+              <div className="bg-gray-900/50 p-3 rounded border border-gray-700/50">
+                <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">{swapDirection === 'USDT_TO_GNO' ? 'Você Recebe (GNO)' : 'Você Recebe (USDT)'}</label>
+                <div className="text-xl font-bold text-green-400 font-mono">{swapAmount ? (swapDirection === 'USDT_TO_GNO' ? (parseFloat(swapAmount) * CONFIG.EXCHANGE_RATE).toFixed(0) : (parseFloat(swapAmount) / CONFIG.EXCHANGE_RATE).toFixed(2)) : '0.00'}</div>
+              </div>
+              <button onClick={handleSwap} className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-3 rounded-lg shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2"><RefreshCw size={16} className={swapAmount ? "animate-spin-slow" : ""} /> CONVERTER AGORA</button>
+              <div className="text-[10px] text-center text-gray-500 flex justify-between px-2"><span>Taxa: 1 USDT = {CONFIG.EXCHANGE_RATE} GNO</span><span>Fee: 0%</span></div>
+            </div>
+
+            <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-1"><History size={12}/> Histórico de Transações</h4>{(!user.transactions || user.transactions.length === 0) ? (<p className="text-gray-600 text-center text-xs py-4">Nenhuma transação recente.</p>) : (<div className="space-y-2">{user.transactions.map((tx, idx) => (<div key={idx} className="flex justify-between items-center bg-gray-700/30 p-2 rounded border border-gray-700/50"><div><p className={`text-xs font-bold ${tx.type === 'DEPOSIT' ? 'text-green-400' : 'text-red-400'}`}>{tx.type === 'DEPOSIT' ? 'Entrada' : 'Saída'}</p><p className="text-[10px] text-gray-500">{tx.date}</p></div><p className="text-sm font-mono font-bold text-white">{tx.type === 'DEPOSIT' ? '+' : '-'}{tx.amount} {tx.currency}</p></div>))}</div>)}</div><div className="p-4 border-t border-gray-700 bg-gray-800 rounded-b-xl space-y-2"><div className="grid grid-cols-2 gap-2"><button onClick={() => handleWalletTransaction('deposit', 10, 'usdt')} className="bg-green-600 hover:bg-green-500 text-white py-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1"><ArrowDownRight size={14}/> Depositar USDT</button><button onClick={() => handleWalletTransaction('withdraw', 10, 'usdt')} className="bg-red-600/20 text-red-400 border border-red-500 hover:bg-red-900/40 py-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1"><ArrowUpRight size={14}/> Sacar USDT</button></div></div></div></div>); };
 
   const renderNetworkModal = () => {
     if (!showNetworkModal) return null;
@@ -609,34 +672,167 @@ export default function App() {
     if (!mine) return null;
     const prodStats = calculateMineProduction(mine);
     
-    // TUTORIAL FLOW: Passo 5 -> 6
-    if (user.tutorialStep === 5) {
-       setTimeout(() => {
-         setUser(u => ({ ...u, tutorialStep: 6 }));
-         setModalState({ type: 'TUTORIAL' }); 
-       }, 800);
-    }
+    // Lógica de Seleção de Gnomo
+    const hasGnomes = mine.gnomes.length > 0;
+    const currentGnome = hasGnomes ? mine.gnomes[simulationGnomeIndex] : null;
+    const gnomeDef = currentGnome ? GNOME_TYPES[Object.keys(GNOME_TYPES).find(k => GNOME_TYPES[k].id === currentGnome.typeId)] : null;
     
+    // Funções de Navegação
+    const nextGnome = (e) => { e?.stopPropagation(); setSimulationGnomeIndex(prev => (prev + 1) % mine.gnomes.length); };
+    const prevGnome = (e) => { e?.stopPropagation(); setSimulationGnomeIndex(prev => (prev - 1 + mine.gnomes.length) % mine.gnomes.length); };
+
+    // Cores baseadas no tipo de mina
+    const mineColors = {
+      GOLD: 'from-yellow-900/40 via-yellow-700/20 to-black',
+      SILVER: 'from-gray-700/40 via-gray-600/20 to-black',
+      COPPER: 'from-orange-900/40 via-orange-700/20 to-black',
+      IRON: 'from-stone-700/40 via-stone-600/20 to-black',
+      COAL: 'from-neutral-800/40 via-neutral-700/20 to-black',
+    };
+
     return (
-      <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
-        <div className="bg-gray-900 w-full max-w-md rounded-3xl border border-gray-700 overflow-hidden shadow-2xl">
-          <div className="bg-gray-800 p-4 border-b border-gray-700 flex justify-between items-center">
-            <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded ${mine.color}`}></div><h3 className="font-bold text-white">{mine.name} <span className="text-xs text-gray-400 font-normal">(Nvl {mine.depthLevel})</span></h3></div>
-            <button onClick={() => setModalState(null)}><X className="text-gray-400"/></button>
-          </div>
-          <div className="h-48 bg-black relative flex items-center justify-center overflow-hidden">
-            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/rocky-wall.png')] opacity-20"></div>
-            {mine.gnomes.length > 0 ? (
-              <div className="flex flex-col items-center animate-bounce"><span className="text-6xl filter drop-shadow-lg">{GNOME_TYPES[Object.keys(GNOME_TYPES).find(k => GNOME_TYPES[k].id === mine.gnomes[0].typeId)]?.icon || '👷'}</span><div className="w-16 h-2 bg-black/50 rounded-full mt-2 relative overflow-hidden border border-gray-600"><div className="absolute top-0 left-0 h-full bg-green-500 w-2/3 animate-pulse"></div></div><span className="text-xs text-green-400 mt-1 font-mono">Minerando...</span></div>
-            ) : (<p className="text-gray-500">Mina Vazia</p>)}
-          </div>
-          <div className="p-6 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-800 p-3 rounded-xl border border-gray-700"><p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Produção Atual</p><p className="text-xl font-bold text-yellow-400 flex items-center gap-1"><Pickaxe size={16}/> {prodStats.production}/h</p></div>
-              <div className="bg-gray-800 p-3 rounded-xl border border-gray-700"><p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Humor da Equipe</p><div className="flex items-center gap-1 text-green-400 font-bold"><Heart size={16} fill="currentColor"/> Feliz</div></div>
+      <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md">
+        <div className="bg-gray-900 w-full max-w-md rounded-[2.5rem] border border-gray-800 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          {/* Header da Sala */}
+          <div className="bg-gray-800/50 backdrop-blur-md p-5 border-b border-gray-700/50 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl ${mine.color} shadow-lg flex items-center justify-center`}>
+                <Pickaxe size={20} className="text-gray-900" />
+              </div>
+              <div>
+                <h3 className="font-black text-white tracking-tight">{mine.name}</h3>
+                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Setor de Extração • Nvl {mine.depthLevel}</p>
+              </div>
             </div>
-            <div><div className="flex justify-between text-xs text-gray-400 mb-1"><span>Energia da Mina</span> <span>{mine.durability}%</span></div><div className="h-2 bg-gray-700 rounded-full overflow-hidden"><div className={`h-full ${mine.durability > 50 ? 'bg-blue-500' : 'bg-red-500'}`} style={{width: `${mine.durability}%`}}></div></div></div>
-            <div className="max-h-32 overflow-y-auto"><p className="text-xs text-gray-500 font-bold mb-2 uppercase">Trabalhadores ({mine.gnomes.length})</p>{mine.gnomes.map((g, i) => { const typeDef = Object.values(GNOME_TYPES).find(t => t.id === g.typeId); const eff = getGnomeEfficiency(g.ageMonths); return (<div key={i} className="flex justify-between items-center bg-gray-800 p-2 rounded mb-1 text-sm border border-gray-700"><span className="flex items-center gap-2">{typeDef.icon} {typeDef.name}</span><span className={`font-mono text-xs ${eff < 1 ? 'text-red-400' : 'text-green-400'}`}>Eficiência: {(eff*100).toFixed(0)}%</span></div>) })}</div>
+            <button onClick={() => setModalState(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="text-gray-400"/></button>
+          </div>
+
+          {/* Área de Mineração Visual */}
+          <div className={`h-64 relative flex items-center justify-center overflow-hidden bg-gradient-to-b ${mineColors[mine.type] || 'from-gray-900 to-black'}`}>
+            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/rocky-wall.png')] opacity-30 mix-blend-overlay"></div>
+            <div className="absolute inset-0 bg-radial-gradient from-transparent to-black/60"></div>
+            
+            {/* Efeito de Pulsação da Caverna */}
+            <div className="absolute inset-0 animate-[cavePulse_4s_infinite_alternate] opacity-20 bg-white"></div>
+
+            {hasGnomes ? (
+              <div className="relative flex flex-col items-center w-full">
+                {/* Controles de Navegação */}
+                {mine.gnomes.length > 1 && (
+                   <>
+                     <button onClick={prevGnome} className="absolute left-4 top-1/2 -translate-y-12 z-20 bg-black/40 hover:bg-black/80 text-white p-3 rounded-full transition-all backdrop-blur-sm border border-white/10 active:scale-90"><ChevronLeft size={24}/></button>
+                     <button onClick={nextGnome} className="absolute right-4 top-1/2 -translate-y-12 z-20 bg-black/40 hover:bg-black/80 text-white p-3 rounded-full transition-all backdrop-blur-sm border border-white/10 active:scale-90"><ChevronRight size={24}/></button>
+                     {/* Indicador de Paginação */}
+                     <div className="absolute bottom-24 flex gap-1 z-10">
+                        {mine.gnomes.map((_, i) => (
+                          <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === simulationGnomeIndex ? 'bg-white w-3' : 'bg-white/30'}`}></div>
+                        ))}
+                     </div>
+                   </>
+                )}
+
+                {/* Faíscas de Mineração */}
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-full h-full pointer-events-none">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className={`absolute w-1 h-1 bg-yellow-400 rounded-full animate-[sparkle_0.6s_ease-out_infinite]`} style={{ 
+                      left: '50%', top: '40%', 
+                      animationDelay: `${i * 0.1}s`,
+                      transform: `rotate(${i * 60}deg) translateY(-20px)`
+                    }}></div>
+                  ))}
+                </div>
+
+                {/* Personagem Gnome */}
+                <div className="relative animate-[miningSwing_0.8s_ease-in-out_infinite]">
+                   <span className="text-8xl filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] select-none">
+                     {gnomeDef?.icon || '👷'}
+                   </span>
+                   {/* Sombra do Gnome */}
+                   <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-16 h-4 bg-black/40 blur-md rounded-full"></div>
+                </div>
+
+                {/* Indicador de Status Dinâmico */}
+                <div className="mt-8 px-4 py-2 bg-black/60 backdrop-blur-md rounded-full border border-white/10 flex flex-col items-center gap-0.5 min-w-[180px]">
+                  <div className="flex items-center gap-2">
+                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                     <span className="text-[10px] text-green-400 font-black uppercase tracking-tighter">Minerando Ativamente</span>
+                  </div>
+                  <span className="text-[10px] text-white font-bold">{gnomeDef?.name} <span className="text-gray-400 font-mono">#{currentGnome?.instanceId.slice(-4)}</span></span>
+                </div>
+
+                {/* Rocha de Impacto (Visual) */}
+                <div className="absolute right-[-40px] top-1/2 -translate-y-1/2 w-24 h-48 bg-gray-800/40 blur-xl rounded-full animate-[rockShake_0.8s_infinite]"></div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3 opacity-40">
+                <ZapOff size={48} className="text-gray-500" />
+                <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">Mina em Hibernação</p>
+              </div>
+            )}
+          </div>
+
+          {/* Painel de Estatísticas Glassmorphism */}
+          <div className="p-6 bg-gray-900/80 backdrop-blur-xl space-y-5 border-t border-gray-800">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-inner">
+                <p className="text-[10px] text-gray-400 uppercase font-black mb-1 tracking-wider">Taxa de Produção</p>
+                <div className="flex items-center gap-2">
+                  <Pickaxe size={18} className="text-yellow-500" />
+                  <p className="text-xl font-black text-white">{prodStats.production}<span className="text-xs text-yellow-500 ml-1">GNO/h</span></p>
+                </div>
+              </div>
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-inner">
+                <p className="text-[10px] text-gray-400 uppercase font-black mb-1 tracking-wider">Moral da Equipe</p>
+                <div className="flex items-center gap-2">
+                  <Heart size={18} className="text-red-500 fill-red-500/30" />
+                  <p className="text-xl font-black text-white">Excelente</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Barra de Integridade */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center px-1">
+                <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Integridade Estrutural</span>
+                <span className={`text-xs font-mono font-bold ${mine.durability > 50 ? 'text-blue-400' : 'text-red-400'}`}>{mine.durability}%</span>
+              </div>
+              <div className="h-3 bg-black/40 rounded-full p-0.5 border border-white/5">
+                <div className={`h-full rounded-full transition-all duration-1000 ${mine.durability > 50 ? 'bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-red-500'}`} style={{width: `${mine.durability}%`}}></div>
+              </div>
+            </div>
+
+            {/* Lista de Trabalhadores Interativa */}
+            <div className="space-y-2 pt-2">
+              <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest px-1">Equipe Alocada ({mine.gnomes.length})</p>
+              <div className="max-h-24 overflow-y-auto space-y-2 pr-1 scrollbar-hide">
+                {mine.gnomes.map((g, i) => {
+                  const typeDef = Object.values(GNOME_TYPES).find(t => t.id === g.typeId);
+                  const eff = getGnomeEfficiency(g.ageMonths);
+                  const isSelected = i === simulationGnomeIndex;
+                  return (
+                    <div 
+                        key={i} 
+                        onClick={() => setSimulationGnomeIndex(i)}
+                        className={`flex justify-between items-center p-3 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-white/10 border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{typeDef.icon}</span>
+                        <div>
+                          <p className={`text-xs font-bold leading-none mb-1 ${isSelected ? 'text-yellow-400' : 'text-white'}`}>{typeDef.name}</p>
+                          <p className="text-[9px] text-gray-500 font-mono uppercase">ID: #{g.instanceId.slice(-4)}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                         {isSelected && <span className="text-[8px] bg-yellow-500/20 text-yellow-300 px-1.5 py-0.5 rounded mr-2 uppercase font-bold">Vendo</span>}
+                        <span className={`font-mono text-[10px] font-black ${(eff * 100) >= 100 ? 'text-green-400' : 'text-yellow-400'}`}>
+                          {(eff * 100).toFixed(0)}% EFF
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -698,7 +894,7 @@ export default function App() {
             <div className="flex justify-between mb-2 mt-2">
               <div className="flex gap-3">
                 <div className={`w-12 h-12 rounded-lg ${mine.color} flex items-center justify-center`}>{isBroken ? <ZapOff size={24} className="text-gray-900" /> : <Pickaxe size={24} className="text-gray-900" />}</div>
-                <div><h3 className="font-bold text-gray-100">{mine.name}</h3><div className="text-xs text-gray-400 flex items-center gap-1"><User size={10} /> {mine.gnomes.length} • <span className={`${isBooming ? 'text-green-400' : isCrashing ? 'text-red-400' : 'text-yellow-400'} font-bold ml-1 flex items-center gap-0.5`}>{production}/h {isBooming && <ArrowUpRight size={10}/>}{isCrashing && <ArrowDownRight size={10}/>}</span></div></div>
+                <div><h3 className="font-bold text-gray-100 flex items-center gap-2">{mine.name} <button onClick={(e) => { e.stopPropagation(); setSimulationGnomeIndex(0); setModalState({ type: 'SIMULATION', data: mine }); }} className={`p-1 rounded transition-all flex items-center gap-1 ${mine.gnomes.length > 0 ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_10px_rgba(37,99,235,0.5)]' : 'bg-gray-700 text-gray-500 hover:bg-gray-600'}`} title="Sala de Simulação"><Eye size={14}/>{mine.gnomes.length > 0 && <span className="text-[8px] font-bold tracking-tighter">LIVE</span>}</button></h3><div className="text-xs text-gray-400 flex items-center gap-1"><User size={10} /> {mine.gnomes.length} • <span className={`${isBooming ? 'text-green-400' : isCrashing ? 'text-red-400' : 'text-yellow-400'} font-bold ml-1 flex items-center gap-0.5`}>{production}/h {isBooming && <ArrowUpRight size={10}/>}{isCrashing && <ArrowDownRight size={10}/>}</span></div></div>
               </div>
               {isAuto && !isBroken && <div className="bg-purple-900/50 border border-purple-500/30 px-2 py-1 rounded text-xs font-bold text-purple-300 flex items-center gap-1"><Bot size={12} /> 7D</div>}
             </div>
@@ -714,8 +910,8 @@ export default function App() {
             {isBroken ? (
                <button onClick={() => handleRepair(mine.id)} className="w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white animate-pulse shadow-lg shadow-red-900/50"><Wrench size={16} /> REPARAR (-{REPAIR_COST_BASE} Gno)</button>
             ) : (
-               <button onClick={(e) => handleHarvest(mine.id, e)} disabled={isStopped || (!isReady && !isAuto)} className={`w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 ${isStopped ? 'bg-gray-700 text-gray-500' : (isReady || isAuto) ? 'bg-green-600 hover:bg-green-500 text-white shadow-[0_4px_0_rgb(21,128,61)] active:translate-y-[2px] active:shadow-none' : 'bg-gray-700 text-gray-400 border border-gray-600'}`}>
-                 {isStopped ? <><Lock size={16} /> PARADA</> : isAuto ? <><Bot size={16} /> AUTO</> : isReady ? <><Coins size={16} /> COLHER</> : <><Clock size={16} /> ...</>}
+               <button onClick={(e) => handleHarvest(mine.id, e)} disabled={isStopped || (!isReady && !isAuto)} className={`w-full py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 ${isStopped ? 'bg-gray-700 text-gray-500' : (isReady || isAuto) ? 'bg-green-600 hover:bg-green-500 text-white shadow-[0_4px_0_rgb(21,128,61)] active:translate-y-[2px] active:shadow-none' : 'bg-gray-800 border border-gray-600 text-yellow-400'}`}>
+                 {isStopped ? <><Lock size={16} /> PARADA</> : isAuto ? <><Bot size={16} /> AUTO</> : isReady ? <><Coins size={16} /> COLHER</> : <><Clock size={16} className="animate-pulse text-yellow-500" /> <span className="flex w-4 text-left"><span className="animate-[bounce_1s_infinite_0ms]">.</span><span className="animate-[bounce_1s_infinite_200ms]">.</span><span className="animate-[bounce_1s_infinite_400ms]">.</span></span></>}
                </button>
             )}
           </div>
@@ -741,18 +937,18 @@ export default function App() {
       </div>
       <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 mt-4">
         <h3 className="font-bold text-gray-200 mb-3 text-sm uppercase">Essenciais</h3>
-        <div className="flex justify-between items-center mb-4"><div className="flex items-center gap-3"><div className="p-2 bg-blue-900/50 rounded text-blue-400"><Zap/></div><div><p className="font-bold text-sm">Pack Energia P</p><p className="text-xs text-gray-500">US$ 0.50</p></div></div><button onClick={buyEnergy} className="bg-blue-600 px-4 py-2 rounded-lg font-bold text-sm text-white">50 GNO</button></div>
-        <div className="flex justify-between items-center"><div className="flex items-center gap-3"><div className="p-2 bg-purple-900/50 rounded text-purple-400"><Bot/></div><div><p className="font-bold text-sm">Gnomo Coletor</p><p className="text-xs text-gray-500">US$ 5.00 / 7 dias</p></div></div><button onClick={() => setTargetMineSelection(PRICES.COLLECTOR_GNOME)} className="bg-purple-600 px-4 py-2 rounded-lg font-bold text-sm text-white">500 GNO</button></div>
+        <div className="flex justify-between items-center mb-4"><div className="flex items-center gap-3"><div className="p-2 bg-blue-900/50 rounded text-blue-400"><Zap/></div><div><p className="font-bold text-sm">Pack Energia P</p><p className="text-xs text-gray-500">+20 Pontos</p></div></div><button onClick={buyEnergy} className="bg-blue-600 px-4 py-2 rounded-lg font-bold text-sm text-white">{PRICES.ENERGY_PACK_SMALL.cost} GNO</button></div>
+        <div className="flex justify-between items-center"><div className="flex items-center gap-3"><div className="p-2 bg-purple-900/50 rounded text-purple-400"><Bot/></div><div><p className="font-bold text-sm">Gnomo Coletor</p><p className="text-xs text-gray-500">7 dias (Auto)</p></div></div><button onClick={() => setTargetMineSelection(PRICES.COLLECTOR_GNOME)} className="bg-purple-600 px-4 py-2 rounded-lg font-bold text-sm text-white">{PRICES.COLLECTOR_GNOME.cost} GNO</button></div>
       </div>
       <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
         <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-3">Equipamentos</h3>
         <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-4">
           <div className="flex items-center gap-3"><div className="w-10 h-10 rounded bg-cyan-900/30 flex items-center justify-center text-cyan-400"><Hammer size={24} /></div><div><h3 className="font-bold text-gray-100">{PRICES.TITANIUM_PICKAXE.name}</h3><p className="text-xs text-gray-400">{PRICES.TITANIUM_PICKAXE.desc}</p></div></div>
-          <button onClick={() => setTargetMineSelection(PRICES.TITANIUM_PICKAXE)} className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1"><Coins size={14} className="text-yellow-200" /> {PRICES.TITANIUM_PICKAXE.cost}</button>
+          <button onClick={() => setTargetMineSelection(PRICES.TITANIUM_PICKAXE)} className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1"><Coins size={14} className="text-yellow-200" /> {PRICES.TITANIUM_PICKAXE.cost} GNO</button>
         </div>
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3"><div className="w-10 h-10 rounded bg-red-900/30 flex items-center justify-center text-red-400"><ZapOff size={24} /></div><div><h3 className="font-bold text-gray-100">{PRICES.TURBO_DRILL.name}</h3><p className="text-xs text-gray-400">{PRICES.TURBO_DRILL.desc}</p></div></div>
-          <button onClick={() => setTargetMineSelection(PRICES.TURBO_DRILL)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1"><DollarSign size={14} className="text-green-200" /> {PRICES.TURBO_DRILL.cost}</button>
+          <button onClick={() => setTargetMineSelection(PRICES.TURBO_DRILL)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-1"><Coins size={14} className="text-yellow-200" /> {PRICES.TURBO_DRILL.cost} GNO</button>
         </div>
       </div>
     </div>
@@ -856,8 +1052,6 @@ export default function App() {
           </div>
           
           <div className="flex gap-2">
-             <button onClick={() => setShowSettingsModal(true)} className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-gray-300"><Settings size={18} /></button>
-             <button onClick={() => setShowRankingModal(true)} className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-yellow-400"><Trophy size={18} /></button>
              <button onClick={() => setShowWheelModal(true)} className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-purple-400"><Dices size={18} /></button>
              <button onClick={() => setShowMissionsModal(true)} className="relative p-2 bg-gray-700 rounded-lg hover:bg-gray-600 text-blue-400">
                <CheckSquare size={18} />
@@ -891,10 +1085,21 @@ export default function App() {
       </div>
       
       {/* Footer Nav */}
-      <div className="bg-gray-800 border-t border-gray-700 p-2 flex justify-around pb-6">
-        <button onClick={() => setCurrentTab('mines')} className={`flex flex-col items-center ${currentTab === 'mines' ? 'text-yellow-500' : 'text-gray-500'}`}><Home size={24}/> <span className="text-[10px] font-bold">Minas</span></button>
-        <button onClick={() => setCurrentTab('store')} className={`flex flex-col items-center ${currentTab === 'store' ? 'text-yellow-500' : 'text-gray-500'}`}><ShoppingBag size={24}/> <span className="text-[10px] font-bold">Loja</span></button>
-        <button onClick={() => setCurrentTab('profile')} className={`flex flex-col items-center ${currentTab === 'profile' ? 'text-yellow-500' : 'text-gray-500'}`}><User size={24}/> <span className="text-[10px] font-bold">Perfil</span></button>
+      <div className="bg-gray-800 border-t border-gray-700 p-2 pb-6 relative z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <div className="flex justify-between items-end px-4">
+          <button onClick={() => setShowRankingModal(true)} className="flex flex-col items-center text-gray-400 hover:text-yellow-400 w-14 transition-colors"><Trophy size={24}/> <span className="text-[10px] font-bold mt-1">Rank</span></button>
+          <button onClick={() => setCurrentTab('store')} className={`flex flex-col items-center w-14 transition-colors ${currentTab === 'store' ? 'text-yellow-500' : 'text-gray-400 hover:text-gray-200'}`}><ShoppingBag size={24}/> <span className="text-[10px] font-bold mt-1">Loja</span></button>
+          
+          <div className="relative -top-6">
+            <button onClick={() => setCurrentTab('mines')} className={`flex flex-col items-center justify-center w-16 h-16 rounded-full border-4 border-gray-900 shadow-[0_0_15px_rgba(234,179,8,0.3)] transform transition-all active:scale-95 ${currentTab === 'mines' ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}>
+              <Pickaxe size={28} />
+            </button>
+            <span className={`text-[10px] font-bold absolute -bottom-5 left-1/2 -translate-x-1/2 transition-colors ${currentTab === 'mines' ? 'text-yellow-500' : 'text-gray-500'}`}>Minas</span>
+          </div>
+
+          <button onClick={() => setCurrentTab('profile')} className={`flex flex-col items-center w-14 transition-colors ${currentTab === 'profile' ? 'text-yellow-500' : 'text-gray-400 hover:text-gray-200'}`}><User size={24}/> <span className="text-[10px] font-bold mt-1">Perfil</span></button>
+          <button onClick={() => setShowSettingsModal(true)} className="flex flex-col items-center text-gray-400 hover:text-gray-200 w-14 transition-colors"><Settings size={24}/> <span className="text-[10px] font-bold mt-1">Config</span></button>
+        </div>
       </div>
 
       {modalState?.type === 'TUTORIAL' && renderTutorialModal()}
@@ -932,12 +1137,30 @@ export default function App() {
       
       {notification && <div className={`fixed top-4 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-2xl z-[100] font-bold text-sm animate-bounce ${notification.type === 'error' ? 'bg-red-600' : 'bg-green-600'}`}>{notification.msg}</div>}
       
-      {/* CSS para Floating Text */}
+      {/* CSS para Animações Imersivas */}
       <style>{`
         @keyframes floatUp {
           0% { transform: translateY(0); opacity: 1; }
           100% { transform: translateY(-50px); opacity: 0; }
         }
+        @keyframes miningSwing {
+          0%, 100% { transform: rotate(-10deg) translateX(0); }
+          50% { transform: rotate(15deg) translateX(10px); }
+        }
+        @keyframes rockShake {
+          0%, 100% { transform: translateY(-50%) translateX(0); }
+          50% { transform: translateY(-50%) translateX(-5px); }
+        }
+        @keyframes sparkle {
+          0% { transform: scale(0) rotate(0deg) translateY(0); opacity: 1; }
+          100% { transform: scale(1) rotate(180deg) translateY(-40px); opacity: 0; }
+        }
+        @keyframes cavePulse {
+          0% { filter: brightness(1); }
+          100% { filter: brightness(1.2); }
+        }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </div>
   );
